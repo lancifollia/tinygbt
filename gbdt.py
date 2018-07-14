@@ -1,3 +1,4 @@
+import time
 from itertools import izip
 
 import numpy as np
@@ -26,11 +27,11 @@ class TreeNode(object):
     def _calc_leaf_weight(self, grad, hessian, lambd):
         return np.sum(grad) / (np.sum(hessian) + lambd)
 
-    def build(self, instances, grad, hessian, depth, param):
+    def build(self, instances, grad, hessian, shrinkage_rate, depth, param):
         assert instances.shape[0] == len(grad) == len(hessian)
         if depth > param['max_depth']:
             self.is_leaf = True
-            self.weight = self._calc_leaf_weight(grad, hessian, param['lambda'])
+            self.weight = self._calc_leaf_weight(grad, hessian, param['lambda']) * shrinkage_rate
             return
         G = np.sum(grad)
         H = np.sum(hessian)
@@ -56,7 +57,7 @@ class TreeNode(object):
                     best_right_instance_ids = sorted_instance_ids[j+1:]
         if best_gain < param['min_split_gain']:
             self.is_leaf = True
-            self.weight = self._calc_leaf_weight(grad, hessian, param['lambda'])
+            self.weight = self._calc_leaf_weight(grad, hessian, param['lambda']) * shrinkage_rate
         else:
             self.split_feature_id = best_feature_id
             self.split_val = best_val
@@ -65,12 +66,14 @@ class TreeNode(object):
             self.left_child.build(instances[best_left_instance_ids],
                                   grad[best_left_instance_ids],
                                   hessian[best_left_instance_ids],
+                                  shrinkage_rate,
                                   depth+1, param)
 
             self.right_child = TreeNode()
             self.right_child.build(instances[best_right_instance_ids],
                                    grad[best_right_instance_ids],
                                    hessian[best_right_instance_ids],
+                                   shrinkage_rate,
                                    depth+1, param)
 
     def predict(self, x):
@@ -88,11 +91,11 @@ class Tree(object):
     def __init__(self):
         self.root = None
 
-    def build(self, instances, grad, hessian, param):
+    def build(self, instances, grad, hessian, shrinkage_rate, param):
         assert len(instances) == len(grad) == len(hessian)
         self.root = TreeNode()
         current_depth = 0
-        self.root.build(instances, grad, hessian, current_depth, param)
+        self.root.build(instances, grad, hessian, shrinkage_rate, current_depth, param)
 
     def predict(self, x):
         return self.root.predict(x)
@@ -102,8 +105,9 @@ class GBDT(object):
     def __init__(self):
         self.params = {'gamma': 0.,
                        'lambda': 1.,
-                       'min_split_gain': 0.5,
+                       'min_split_gain': 0.1,
                        'max_depth': 5,
+                       'learning_rate': 0.3,
                        }
 
     def _calc_training_data_scores(self, train_set, models):
@@ -125,9 +129,9 @@ class GBDT(object):
             grad = np.array([2 * (labels[i] - scores[i]) for i in range(len(labels))])
         return grad, hessian
 
-    def _build_learner(self, train_set, grad, hessian):
+    def _build_learner(self, train_set, grad, hessian, shrinkage_rate):
         learner = Tree()
-        learner.build(train_set.X, grad, hessian, self.params)
+        learner.build(train_set.X, grad, hessian, shrinkage_rate, self.params)
         return learner
 
     def _calc_rmse(self, models, data_set):
@@ -139,15 +143,21 @@ class GBDT(object):
     def train(self, params, train_set, num_boost_round=20, valid_set=None, early_stopping_rounds=5):
         self.params.update(params)
         models = []
+        shrinkage_rate = 1.
 
         for iter_cnt in range(num_boost_round):
+            start_time = time.time()
             scores = self._calc_training_data_scores(train_set, models)
             grad, hessian = self._calc_gradient(train_set, scores)
-            learner = self._build_learner(train_set, grad, hessian)
+            learner = self._build_learner(train_set, grad, hessian, shrinkage_rate)
+            if iter_cnt > 0:
+                shrinkage_rate *= self.params['learning_rate']
             models.append(learner)
             train_error = self._calc_rmse(models, train_set)
             val_error = self._calc_rmse(models, valid_set) if valid_set else None
-            print('iter {}, train error: {}, val_error: {}'.format(iter_cnt, train_error, val_error))
+            val_str = '{:.10f}'.format(val_error) if val_error else '-'
+            print('iter {:>3}, train error: {:.10f}, val_error: {}, elapsed: {:.2f} sec'
+                  .format(iter_cnt, train_error, val_str, time.time() - start_time))
 
         self.models = models
 
