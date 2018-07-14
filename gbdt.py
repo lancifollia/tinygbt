@@ -44,8 +44,8 @@ class TreeNode(object):
             G_l, H_l = 0., 0.
             sorted_instance_ids = instances[:,feature_id].argsort()
             for j in range(sorted_instance_ids.shape[0]):
-                G_l += grad[j]
-                H_l += hessian[j]
+                G_l += grad[sorted_instance_ids[j]]
+                H_l += hessian[sorted_instance_ids[j]]
                 G_r = G - G_l
                 H_r = H - H_l
                 current_gain = self._calc_split_gain(G, H, G_l, H_l, G_r, H_r, param['lambda'])
