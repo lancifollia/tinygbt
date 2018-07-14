@@ -22,7 +22,7 @@ print('Start training...')
 gbm = gbdt_train(params,
                  train_data,
                  num_boost_round=20,
-                 valid_sets=eval_data,
+                 valid_set=eval_data,
                  early_stopping_rounds=5)
 
 print('Done')

@@ -27,6 +27,7 @@ class TreeNode(object):
         return np.sum(grad) / (np.sum(hessian) + lambd)
 
     def build(self, instances, grad, hessian, depth, param):
+        assert instances.shape[0] == len(grad) == len(hessian)
         if depth > param['max_depth']:
             self.is_leaf = True
             self.weight = self._calc_leaf_weight(grad, hessian, param['lambda'])
@@ -34,14 +35,14 @@ class TreeNode(object):
         G = np.sum(grad)
         H = np.sum(hessian)
         best_gain = 0.
-        best_fid = None
+        best_feature_id = None
         best_val = 0.
         best_left_instance_ids = None
         best_right_instance_ids = None
-        for fid in instances.columns:
+        for feature_id in range(instances.shape[1]):
             G_l, H_l = 0., 0.
-            sorted_instance_ids = instances.sort_values(by=fid).index.tolist()
-            for j in range(sorted_instance_ids):
+            sorted_instance_ids = instances[:,feature_id].argsort()
+            for j in range(sorted_instance_ids.shape[0]):
                 G_l += grad[j]
                 H_l += hessian[j]
                 G_r = G - G_l
@@ -49,25 +50,25 @@ class TreeNode(object):
                 current_gain = self._calc_split_gain(G, H, G_l, H_l, G_r, H_r, param['lambda'])
                 if current_gain > best_gain:
                     best_gain = current_gain
-                    best_fid = fid
-                    best_val = instances.iloc[sorted_instance_ids[j]][fid]
+                    best_feature_id = feature_id
+                    best_val = instances[sorted_instance_ids[j]][feature_id]
                     best_left_instance_ids = sorted_instance_ids[:j+1]
                     best_right_instance_ids = sorted_instance_ids[j+1:]
         if best_gain < param['min_split_gain']:
             self.is_leaf = True
             self.weight = self._calc_leaf_weight(grad, hessian, param['lambda'])
         else:
-            self.split_feature_id = best_fid
+            self.split_feature_id = best_feature_id
             self.split_val = best_val
 
             self.left_child = TreeNode()
-            self.left_child.build(instances.iloc[best_left_instance_ids],
+            self.left_child.build(instances[best_left_instance_ids],
                                   grad[best_left_instance_ids],
                                   hessian[best_left_instance_ids],
                                   depth+1, param)
 
             self.right_child = TreeNode()
-            self.right_child.build(instances.iloc[best_right_instance_ids],
+            self.right_child.build(instances[best_right_instance_ids],
                                    grad[best_right_instance_ids],
                                    hessian[best_right_instance_ids],
                                    depth+1, param)
@@ -88,14 +89,13 @@ class Tree(object):
         self.root = None
 
     def build(self, instances, grad, hessian, param):
-        assert len(X) == len(grad) == len(hessian)
+        assert len(instances) == len(grad) == len(hessian)
         self.root = TreeNode()
         current_depth = 0
         self.root.build(instances, grad, hessian, current_depth, param)
 
     def predict(self, x):
-        current_node = self.node
-        return self.node.predict(x)
+        return self.root.predict(x)
 
 
 class GBDT(object):
@@ -127,7 +127,7 @@ class GBDT(object):
 
     def _build_learner(self, train_set, grad, hessian):
         learner = Tree()
-        learner.build(train_set.X, grad, hessian, self.param)
+        learner.build(train_set.X, grad, hessian, self.params)
         return learner
 
     def _calc_rmse(self, models, data_set):
@@ -144,7 +144,7 @@ class GBDT(object):
             scores = self._calc_training_data_scores(train_set, models)
             grad, hessian = self._calc_gradient(train_set, scores)
             learner = self._build_learner(train_set, grad, hessian)
-            self.models.append(learner)
+            models.append(learner)
             train_error = self._calc_rmse(models, train_set)
             val_error = self._calc_rmse(models, valid_set) if valid_set else None
             print('iter {}, train error: {}, val_error: {}'.format(iter_cnt, train_error, val_error))
