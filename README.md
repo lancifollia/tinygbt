@@ -7,11 +7,11 @@ Since this code is not for production, it is not optimized for speed and memory 
 ### Experiment
 
 - Data: [LightGBM's regression example data](https://github.com/Microsoft/LightGBM/tree/master/examples/regression)
-- TinyGBT is quite slower than LightGBM, but achieve almost same RMSE on validation dataset on similar paramter settings.
+- TinyGBT is quite slower than LightGBM, but achieve almost same testset RMSE on similar parameter settings.
 
 | - | LightGBM | TinyGBT |
 | --- | --- | --- |
-| RMSE | 0.45652 | 0.45934 |
+| RMSE of TestSet | 0.45652 | 0.45934 |
 
 #### Reproduce experiment
 
