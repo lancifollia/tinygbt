@@ -1,5 +1,12 @@
+import sys
 import time
-from itertools import izip
+try:
+    # For python2
+    from itertools import izip as zip
+    LARGE_NUMBER = sys.maxint
+except ImportError:
+    # For python3
+    LARGE_NUMBER = sys.maxsize
 
 import numpy as np
 
@@ -109,6 +116,7 @@ class GBDT(object):
                        'max_depth': 5,
                        'learning_rate': 0.3,
                        }
+        self.best_iteration = None
 
     def _calc_training_data_scores(self, train_set, models):
         if len(models) == 0:
@@ -119,8 +127,7 @@ class GBDT(object):
             scores[i] = self.predict(X[i], models=models)
         return scores
 
-    def _calc_gradient(self, train_set, scores):
-        ''' L2 loss only '''
+    def _calc_l2_gradient(self, train_set, scores):
         labels = train_set.y
         hessian = np.full(len(labels), 2)
         if scores is None:
@@ -129,46 +136,60 @@ class GBDT(object):
             grad = np.array([2 * (labels[i] - scores[i]) for i in range(len(labels))])
         return grad, hessian
 
+    def _calc_gradient(self, train_set, scores):
+        return self._calc_l2_gradient(train_set, scores)
+
+    def _calc_l2_loss(self, models, data_set):
+        errors = []
+        for x, y in zip(data_set.X, data_set.y):
+            errors.append(y - self.predict(x, models))
+        return np.mean(np.square(errors))
+
+    def _calc_loss(self, models, data_set):
+        return self._calc_l2_loss(models, data_set)
+
     def _build_learner(self, train_set, grad, hessian, shrinkage_rate):
         learner = Tree()
         learner.build(train_set.X, grad, hessian, shrinkage_rate, self.params)
         return learner
 
-    def _calc_rmse(self, models, data_set):
-        errors = []
-        for x, y in izip(data_set.X, data_set.y):
-            errors.append(y - self.predict(x, models))
-        return np.square(np.mean(np.square(errors)))
-
     def train(self, params, train_set, num_boost_round=20, valid_set=None, early_stopping_rounds=5):
         self.params.update(params)
         models = []
         shrinkage_rate = 1.
+        best_iteration = None
+        best_val_loss = LARGE_NUMBER
+        train_start_time = time.time()
 
+        print("Training until validation scores don't improve for {} rounds."
+              .format(early_stopping_rounds))
         for iter_cnt in range(num_boost_round):
-            start_time = time.time()
+            iter_start_time = time.time()
             scores = self._calc_training_data_scores(train_set, models)
             grad, hessian = self._calc_gradient(train_set, scores)
             learner = self._build_learner(train_set, grad, hessian, shrinkage_rate)
             if iter_cnt > 0:
                 shrinkage_rate *= self.params['learning_rate']
             models.append(learner)
-            train_error = self._calc_rmse(models, train_set)
-            val_error = self._calc_rmse(models, valid_set) if valid_set else None
-            val_str = '{:.10f}'.format(val_error) if val_error else '-'
-            print('iter {:>3}, train error: {:.10f}, val_error: {}, elapsed: {:.2f} sec'
-                  .format(iter_cnt, train_error, val_str, time.time() - start_time))
+            train_loss = self._calc_loss(models, train_set)
+            val_loss = self._calc_loss(models, valid_set) if valid_set else None
+            val_loss_str = '{:.10f}'.format(val_loss) if val_loss else '-'
+            print("Iter {:>3}, Train's L2: {:.10f}, Valid's L2: {}, Elapsed: {:.2f} secs"
+                  .format(iter_cnt, train_loss, val_loss_str, time.time() - iter_start_time))
+            if val_loss is not None and val_loss < best_val_loss:
+                best_val_loss = val_loss
+                best_iteration = iter_cnt
+            if iter_cnt - best_iteration >= early_stopping_rounds:
+                print("Early stopping, best iteration is:")
+                print("Iter {:>3}, Train's L2: {:.10f}".format(best_iteration, best_val_loss))
+                break
 
         self.models = models
+        self.best_iteration = best_iteration
+        print("Training finished. Elapsed: {:.2f} secs".format(time.time() - train_start_time))
 
-    def predict(self, x, models=None):
+    def predict(self, x, models=None, num_iteration=None):
         if models is None:
             models = self.models
         assert models is not None
-        return np.sum(m.predict(x) for m in models)
-
-
-def gbdt_train(params, train_set, num_boost_round=20, valid_set=None, early_stopping_rounds=5):
-    gbdt = GBDT()
-    gbdt.train(params, train_set, num_boost_round, valid_set, early_stopping_rounds)
-    return gbdt
+        return np.sum(m.predict(x) for m in models[:num_iteration])

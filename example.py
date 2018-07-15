@@ -1,7 +1,7 @@
 import pandas as pd
+from sklearn.metrics import mean_squared_error
 
-from gbdt import Dataset
-from gbdt import gbdt_train
+from gbdt import Dataset, GBDT
 
 
 print('Load data...')
@@ -19,10 +19,16 @@ eval_data = Dataset(X_test, y_test)
 params = {}
 
 print('Start training...')
-gbm = gbdt_train(params,
-                 train_data,
-                 num_boost_round=20,
-                 valid_set=eval_data,
-                 early_stopping_rounds=5)
+gbt = GBDT()
+gbt.train(params,
+          train_data,
+          num_boost_round=20,
+          valid_set=eval_data,
+          early_stopping_rounds=5)
 
-print('Done')
+print('Start predicting...')
+y_pred = []
+for x in X_test:
+    y_pred.append(gbt.predict(x, num_iteration=gbt.best_iteration))
+
+print('The rmse of prediction is:', mean_squared_error(y_test, y_pred) ** 0.5)
