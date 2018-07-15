@@ -1,7 +1,7 @@
 import pandas as pd
 from sklearn.metrics import mean_squared_error
 
-from gbdt import Dataset, GBDT
+from tinygbt import Dataset, GBT
 
 
 print('Load data...')
@@ -19,7 +19,7 @@ eval_data = Dataset(X_test, y_test)
 params = {}
 
 print('Start training...')
-gbt = GBDT()
+gbt = GBT()
 gbt.train(params,
           train_data,
           num_boost_round=20,

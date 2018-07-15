@@ -1,3 +1,13 @@
+#!/usr/bin/python
+'''
+    File name: tinygbt.py
+    Author: Seong-Jin Kim
+    EMail: lancifollia@gmail.com
+    Date created: 7/15/2018
+    Reference:
+        [1] T. Chen and C. Guestrin. XGBoost: A Scalable Tree Boosting System. 2016.
+'''
+
 import sys
 import time
 try:
@@ -27,14 +37,26 @@ class TreeNode(object):
         self.weight = None
 
     def _calc_split_gain(self, G, H, G_l, H_l, G_r, H_r, lambd):
+        """
+        Loss reduction
+        (Refer to Eq7 of Reference[1])
+        """
         def calc_term(g, h):
             return np.square(g) / (h + lambd)
         return calc_term(G_l, H_l) + calc_term(G_r, H_r) - calc_term(G, H)
 
     def _calc_leaf_weight(self, grad, hessian, lambd):
+        """
+        Calculate the optimal weight of this leaf node.
+        (Refer to Eq5 of Reference[1])
+        """
         return np.sum(grad) / (np.sum(hessian) + lambd)
 
     def build(self, instances, grad, hessian, shrinkage_rate, depth, param):
+        """
+        Exact Greedy Alogirithm for Split Finidng
+        (Refer to Algorithm1 of Reference[1])
+        """
         assert instances.shape[0] == len(grad) == len(hessian)
         if depth > param['max_depth']:
             self.is_leaf = True
@@ -108,7 +130,7 @@ class Tree(object):
         return self.root.predict(x)
 
 
-class GBDT(object):
+class GBT(object):
     def __init__(self):
         self.params = {'gamma': 0.,
                        'lambda': 1.,
@@ -137,6 +159,7 @@ class GBDT(object):
         return grad, hessian
 
     def _calc_gradient(self, train_set, scores):
+        """For now, only L2 loss is supported"""
         return self._calc_l2_gradient(train_set, scores)
 
     def _calc_l2_loss(self, models, data_set):
@@ -146,6 +169,7 @@ class GBDT(object):
         return np.mean(np.square(errors))
 
     def _calc_loss(self, models, data_set):
+        """For now, only L2 loss is supported"""
         return self._calc_l2_loss(models, data_set)
 
     def _build_learner(self, train_set, grad, hessian, shrinkage_rate):
