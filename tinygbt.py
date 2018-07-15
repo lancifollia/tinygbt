@@ -6,6 +6,7 @@
     Date created: 7/15/2018
     Reference:
         [1] T. Chen and C. Guestrin. XGBoost: A Scalable Tree Boosting System. 2016.
+        [2] G. Ke et al. LightGBM: A Highly Efficient Gradient Boosting Decision Tree. 2017.
 '''
 
 import sys
